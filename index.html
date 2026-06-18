@@ -34,6 +34,80 @@
             overflow: hidden; 
         }
 
+        /* =========================================================
+           [스플래시 화면 (인트로 연속 애니메이션)]
+           ========================================================= */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.8s ease-in-out, visibility 0.8s;
+        }
+        
+        #splash-screen.fade-out {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        /* 첫 번째 문구: 나타났다 사라짐 */
+        .splash-text-1 {
+            position: absolute;
+            color: var(--dark-bg);
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -1.5px;
+            opacity: 0;
+            transform: translateY(15px);
+            /* 0초 시작 -> 0.6초간 나타남 -> 1.5초 대기 후 0.6초간 사라짐 */
+            animation: 
+                introText1In 0.6s ease-out forwards, 
+                introText1Out 0.6s 1.5s ease-in forwards;
+        }
+        .splash-text-1 span { color: var(--primary); }
+
+        @keyframes introText1In { to { opacity: 1; transform: translateY(0); } }
+        @keyframes introText1Out { to { opacity: 0; transform: translateY(-15px); } }
+
+        /* 두 번째 문구 (AeroRoute): 물결 채우기 효과 */
+        .splash-text-2 {
+            position: absolute;
+            font-size: 5.5rem;
+            font-weight: 900;
+            letter-spacing: -2px;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            
+            /* SVG 물결 이미지 + 연한 회색 배경(채워지지 않은 윗부분)을 겹침 */
+            background-image: 
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 300'%3E%3Cpath d='M0,150 Q250,50 500,150 T1000,150 V300 H0 Z' fill='%2306B6D4' opacity='0.8'/%3E%3Cpath d='M0,150 Q250,250 500,150 T1000,150 V300 H0 Z' fill='%232563EB' opacity='0.6'/%3E%3C/svg%3E"),
+                linear-gradient(to bottom, #cbd5e1 0%, #e2e8f0 100%);
+            background-size: 400px auto, 100% 100%;
+            background-repeat: repeat-x, no-repeat;
+            
+            opacity: 0;
+            transform: translateY(15px);
+            /* 2.1초에 등장 -> 배경 물결 애니메이션 무한 반복 */
+            animation: 
+                introText2In 0.6s 2.1s ease-out forwards,
+                waveFillText 2.5s linear infinite;
+        }
+
+        @keyframes introText2In { to { opacity: 1; transform: translateY(0); } }
+        @keyframes waveFillText {
+            /* x축 위치를 0에서 400px(배경크기)까지 밀어 물결이 흐르는 것처럼 연출 */
+            0% { background-position: 0px 55%, 0 0; }
+            100% { background-position: 400px 55%, 0 0; }
+        }
+
+
         /* 배경 파티클 */
         #windCanvas {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -100,12 +174,11 @@
             overflow: hidden; 
         }
 
-        /* 중심 행성 안의 AeroRoute 텍스트 (반원에 맞게 위치 조정) */
+        /* 중심 행성 안의 AeroRoute 텍스트 */
         .center-circle-text {
             position: absolute;
             top: 50%;
-            /* 원의 폭이 500px이고 왼쪽 250px만 보임 -> 노출된 반원의 중앙인 약 120px로 이동 */
-            left: 120px; 
+            left: 175px; 
             transform: translate(-50%, -50%);
             font-size: 2.6rem;
             font-weight: 900;
@@ -239,18 +312,21 @@
 </head>
 <body>
 
+    <div id="splash-screen">
+        <h1 class="splash-text-1">깨끗한 공기 <span>행복한 세상</span></h1>
+        <div class="splash-text-2">AeroRoute</div>
+    </div>
+
     <nav>
         <div class="logo">AeroRoute</div>
         <div class="badge">AeroRoute System</div>
     </nav>
 
     <div class="orbital-nav" id="orbitalNavContainer">
-        <!-- 업그레이드된 중심 행성 -->
         <div class="center-circle">
             <div class="wave"></div>
             <div class="wave"></div>
             <div class="wave"></div>
-            <!-- 화면에 보이는 반원 형태에 맞춰 줄바꿈하여 예쁘게 배치 -->
             <div class="center-circle-text">Aero<br>Route</div>
         </div>
         
@@ -359,21 +435,21 @@
                             <h4>기상청_지상(종관, ASOS) 시간자료</h4>
                             <p>울산 지역의 실시간 풍향 및 풍속 데이터를 수집하여 확산 벡터 계산에 활용</p>
                         </div>
-                        <a href="#" class="data-link">데이터 연결 ↗</a>
+                        <a href="https://www.data.go.kr/data/15057210/openapi.do" target="_blank" class="data-link">데이터 연결 ↗</a>
                     </div>
                     <div class="data-item">
                         <div class="data-info">
                             <h4>한국환경공단_에어코리아_대기오염정보</h4>
                             <p>측정소별 실시간 미세먼지(PM), 아황산가스 농도를 파악하여 확산 정보 매핑</p>
                         </div>
-                        <a href="#" class="data-link">데이터 연결 ↗</a>
+                        <a href="https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15073861" target="_blank" class="data-link">데이터 연결 ↗</a>
                     </div>
                     <div class="data-item">
                         <div class="data-info">
                             <h4>울산광역시 빅데이터센터 공간 데이터</h4>
                             <p>국가산단 경계 좌표 및 지역별 악취 민원 데이터를 기반으로 정확도 보정</p>
                         </div>
-                        <a href="#" class="data-link">데이터 연결 ↗</a>
+                        <a href="https://ulsandata.kr/" target="_blank" class="data-link">데이터 연결 ↗</a>
                     </div>
                 </div>
             </div>
@@ -429,6 +505,13 @@
     </footer>
 
     <script>
+        // 스플래시 화면 제어 (총 연속 애니메이션 대기 후 페이드아웃)
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                document.getElementById('splash-screen').classList.add('fade-out');
+            }, 4500); // 4.5초 후 메인 대시보드로 전환
+        });
+
         const triggers = document.querySelectorAll('.planet-trigger');
         const panels = document.querySelectorAll('.info-panel');
         const welcomeMessage = document.getElementById('welcome-message');
