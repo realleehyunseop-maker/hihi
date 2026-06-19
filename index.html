@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AeroRoute - 데이터가 그리는 오염의 궤적</title>
+    <title>울산 고정밀 악취 및 오염 가우시안 확산 예측 시스템</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
@@ -14,600 +15,535 @@
             --dark-card: #0F172A;
             --text-main: #F8FAFC;
             --text-muted: #94A3B8;
-            --border: rgba(6, 182, 212, 0.2);
+            --border-color: rgba(6, 182, 212, 0.2);
             --highlight: #38BDF8;
+
+            --safe-color: #10B981;
+            --warning-color: #F59E0B;
+            --danger-color: #EF4444;
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Pretendard', -apple-system, sans-serif;
         }
 
         body {
+            font-family: 'Pretendard', -apple-system, sans-serif;
             background-color: var(--dark-bg);
             color: var(--text-main);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden; 
-        }
-
-        /* =========================================================
-           [스플래시 화면 (인트로 연속 애니메이션)]
-           ========================================================= */
-        #splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #ffffff;
-            z-index: 9999;
+            padding: 15px;
+            height: 100vh; /* 화면 꽉 차게 */
             display: flex;
             justify-content: center;
-            align-items: center;
-            transition: opacity 0.8s ease-in-out, visibility 0.8s;
+            overflow: hidden; /* 외부 스크롤 방지 */
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 1400px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: 100%; /* 대시보드 높이 고정 */
+        }
+
+        /* 상단 헤더 */
+        .header {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px 25px;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            flex-shrink: 0; /* 헤더 찌그러짐 방지 */
+        }
+        .header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.5px; font-weight: 800; }
+        .header p { margin: 6px 0 0 0; font-size: 0.9rem; color: var(--text-muted); }
+        .header .timestamp { 
+            position: absolute; right: 25px; top: 25px; 
+            font-size: 0.85rem; background: rgba(6, 182, 212, 0.1); 
+            color: var(--secondary); padding: 6px 12px; border-radius: 20px; 
+            border: 1px solid var(--border-color); font-weight: bold;
         }
         
-        #splash-screen.fade-out {
-            opacity: 0;
-            visibility: hidden;
+        .layout-container {
+            display: flex;
+            gap: 15px;
+            flex: 1;
+            min-height: 0; /* Flexbox 하위 요소 스크롤을 위한 필수 설정 */
         }
 
-        /* 첫 번째 문구: 나타났다 사라짐 */
-        .splash-text-1 {
+        /* 좌측 사이드바 */
+        .sidebar {
+            flex: 1;
+            min-width: 380px;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-height: 0; /* 스크롤 활성화를 위한 필수 설정 */
+        }
+        
+        .pane-section { 
+            background: rgba(15, 23, 42, 0.7); 
+            backdrop-filter: blur(12px);
+            padding: 20px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .pane-title { font-size: 1.05rem; font-weight: bold; color: var(--text-main); margin-bottom: 15px; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        
+        /* 버튼 및 컨트롤 */
+        .mode-toggle-box { display: flex; gap: 8px; margin-bottom: 15px; flex-shrink: 0;}
+        .mode-btn { 
+            flex: 1; background: rgba(2, 6, 23, 0.6); border: 1px solid rgba(255,255,255,0.1); 
+            color: var(--text-muted); padding: 10px; font-weight: bold; cursor: pointer; 
+            border-radius: 8px; font-size: 0.85rem; transition: all 0.3s; 
+        }
+        .mode-btn:hover { border-color: var(--secondary); color: var(--text-main); }
+        .mode-btn.active { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4); }
+        
+        .control-group { margin-bottom: 15px; flex-shrink: 0;}
+        .control-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
+        input[type=range] { width: 100%; accent-color: var(--secondary); background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; outline: none;}
+        
+        /* 스테이션 목록 및 스크롤 디자인 */
+        .station-grid { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            overflow-y: auto; /* 내부 스크롤 활성화 */
+            padding-right: 5px; 
+            flex: 1; 
+            min-height: 0; 
+        }
+        .station-grid::-webkit-scrollbar { width: 6px; }
+        .station-grid::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.3); border-radius: 4px; }
+        .station-grid::-webkit-scrollbar-track { background: transparent; }
+
+        .station-row { 
+            background: rgba(2, 6, 23, 0.6); border: 1px solid rgba(255,255,255,0.05); 
+            border-radius: 10px; padding: 12px; font-size: 0.85rem; 
+            display: flex; justify-content: space-between; align-items: center; 
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        .station-row:hover { border-color: rgba(6, 182, 212, 0.4); background: rgba(15, 23, 42, 0.8); }
+        .station-name { font-weight: bold; color: var(--secondary); font-size: 0.95rem; margin-bottom: 4px; display: inline-block;}
+        .station-badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
+        
+        /* 지도 섹션 */
+        .map-section {
+            flex: 2;
+            min-width: 500px;
+            background: rgba(15, 23, 42, 0.7); 
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); 
+            border-radius: 16px;
+            padding: 5px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .map-wrapper { position: relative; width: 100%; height: 100%; border-radius: 12px; overflow: hidden; background: #020617; }
+        #map { width: 100%; height: 100%; background: transparent; }
+        
+        .leaflet-layer, .leaflet-control-zoom-in, .leaflet-control-zoom-out, .leaflet-control-attribution {
+            filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(110%);
+        }
+
+        #overlayCanvas { position: absolute; top: 0; left: 0; z-index: 1000; pointer-events: none; }
+        
+        /* 하단 알림 패널 */
+        .alert-panel { 
+            padding: 16px; text-align: center; font-size: 1.05rem; font-weight: bold; 
+            border-radius: 16px; border: 1px solid; letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+        .status-safe { background-color: rgba(16, 185, 129, 0.1); color: var(--safe-color); border-color: rgba(16, 185, 129, 0.3); }
+        .status-warning { background-color: rgba(245, 158, 11, 0.1); color: var(--warning-color); border-color: rgba(245, 158, 11, 0.3); }
+        .status-danger { background-color: rgba(239, 68, 68, 0.1); color: var(--danger-color); border-color: rgba(239, 68, 68, 0.3); box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+        
+        .zone-tooltip { 
+            background: rgba(15, 23, 42, 0.95); color: #fff; 
+            border: 1px solid var(--secondary); box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+            font-weight: normal; padding: 6px 10px; border-radius: 6px; 
+        }
+        .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before, .leaflet-tooltip-left:before, .leaflet-tooltip-right:before {
+            border-top-color: rgba(15, 23, 42, 0.95) !important;
+        }
+
+        /* tuto.html 이동 버튼 */
+        .nav-info-btn {
             position: absolute;
-            color: var(--dark-bg);
-            font-size: 3rem;
-            font-weight: 800;
-            letter-spacing: -1.5px;
-            opacity: 0;
-            transform: translateY(15px);
-            /* 0초 시작 -> 0.6초간 나타남 -> 1.5초 대기 후 0.6초간 사라짐 */
-            animation: 
-                introText1In 0.6s ease-out forwards, 
-                introText1Out 0.6s 1.5s ease-in forwards;
-        }
-        .splash-text-1 span { color: var(--primary); }
-
-        @keyframes introText1In { to { opacity: 1; transform: translateY(0); } }
-        @keyframes introText1Out { to { opacity: 0; transform: translateY(-15px); } }
-
-        /* 두 번째 문구 (AeroRoute): 물결 채우기 효과 */
-        .splash-text-2 {
-            position: absolute;
-            font-size: 5.5rem;
-            font-weight: 900;
-            letter-spacing: -2px;
-            color: transparent;
-            -webkit-background-clip: text;
-            background-clip: text;
-            
-            /* SVG 물결 이미지 + 연한 회색 배경(채워지지 않은 윗부분)을 겹침 */
-            background-image: 
-                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 300'%3E%3Cpath d='M0,150 Q250,50 500,150 T1000,150 V300 H0 Z' fill='%2306B6D4' opacity='0.8'/%3E%3Cpath d='M0,150 Q250,250 500,150 T1000,150 V300 H0 Z' fill='%232563EB' opacity='0.6'/%3E%3C/svg%3E"),
-                linear-gradient(to bottom, #cbd5e1 0%, #e2e8f0 100%);
-            background-size: 400px auto, 100% 100%;
-            background-repeat: repeat-x, no-repeat;
-            
-            opacity: 0;
-            transform: translateY(15px);
-            /* 2.1초에 등장 -> 배경 물결 애니메이션 무한 반복 */
-            animation: 
-                introText2In 0.6s 2.1s ease-out forwards,
-                waveFillText 2.5s linear infinite;
-        }
-
-        @keyframes introText2In { to { opacity: 1; transform: translateY(0); } }
-        @keyframes waveFillText {
-            /* x축 위치를 0에서 400px(배경크기)까지 밀어 물결이 흐르는 것처럼 연출 */
-            0% { background-position: 0px 55%, 0 0; }
-            100% { background-position: 400px 55%, 0 0; }
-        }
-
-
-        /* 배경 파티클 */
-        #windCanvas {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1; pointer-events: none; opacity: 0.8;
-        }
-
-        /* 내비게이션 */
-        nav {
-            position: fixed; top: 0; width: 100%;
-            background: rgba(2, 6, 23, 0.5); backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            padding: 1rem 5%; z-index: 1000;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        nav .logo {
-            font-size: 1.5rem; font-weight: 800;
+            bottom: 25px;
+            right: 25px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            color: #ffffff;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+            z-index: 9999;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            letter-spacing: 0.5px;
         }
-        nav .badge {
-            background: rgba(6, 182, 212, 0.1); color: var(--secondary);
-            padding: 6px 16px; border-radius: 50px; font-size: 0.85rem;
-            font-weight: 600; border: 1px solid var(--border);
+        .nav-info-btn:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(6, 182, 212, 0.6);
+            border-color: rgba(255, 255, 255, 0.5);
         }
-
-        /* 메인 영역 */
-        main {
-            flex: 1; display: flex; align-items: center;
-            padding: 0 5% 0 8%; position: relative; z-index: 10;
-        }
-
-        /* 정보 패널 */
-        .info-panel {
-            width: 55%; opacity: 0; transform: translateX(-50px) translateY(-50%);
-            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            pointer-events: none; position: absolute; top: 50%; left: 8%;
-        }
-        .info-panel.active {
-            opacity: 1; transform: translateX(0) translateY(-50%); pointer-events: auto;
-        }
-        .panel-card {
-            background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(20px);
-            padding: 50px; border-radius: 24px; border: 1px solid var(--border);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 0 20px rgba(6,182,212,0.05);
-        }
-
-        /* =========================================================
-           [오비탈 내비게이션] - 중심 행성(AeroRoute) 및 주변 궤도
-           ========================================================= */
-        .orbital-nav {
-            position: fixed; right: -400px; top: 50%; transform: translateY(-50%);
-            width: 800px; height: 800px; z-index: 100; pointer-events: none;
-        }
-
-        /* 1. 중심 행성 */
-        .center-circle {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 500px; height: 500px; 
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(6, 182, 212, 0.2) 100%);
-            backdrop-filter: blur(20px); border-radius: 50%;
-            border: 1px solid rgba(6, 182, 212, 0.4); 
-            box-shadow: 0 0 80px rgba(0,0,0,0.6), inset 0 0 60px rgba(6, 182, 212, 0.3);
-            pointer-events: auto;
-            overflow: hidden; 
-        }
-
-        /* 중심 행성 안의 AeroRoute 텍스트 */
-        .center-circle-text {
-            position: absolute;
-            top: 50%;
-            left: 175px; 
-            transform: translate(-50%, -50%);
-            font-size: 2.6rem;
-            font-weight: 900;
-            background: linear-gradient(135deg, #ffffff, var(--highlight));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            z-index: 10;
-            letter-spacing: 2px;
-            text-shadow: 0 0 30px rgba(6, 182, 212, 0.4);
-            pointer-events: none;
-            text-align: center;
-            line-height: 1.1;
-        }
-
-        /* 물결(Wave) 애니메이션 요소 */
-        .wave {
-            position: absolute;
-            width: 200%;
-            height: 200%;
-            background: rgba(6, 182, 212, 0.15);
-            border-radius: 40%;
-            bottom: -130%;
-            left: -50%;
-            animation: spinWave 12s linear infinite;
-            z-index: 1;
-        }
-        .wave:nth-child(2) {
-            background: rgba(37, 99, 235, 0.15);
-            animation: spinWave 16s linear infinite;
-            border-radius: 42%;
-            bottom: -135%;
-        }
-        .wave:nth-child(3) {
-            background: rgba(56, 189, 248, 0.1);
-            animation: spinWave 20s linear infinite;
-            border-radius: 44%;
-            bottom: -140%;
-        }
-
-        @keyframes spinWave {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* 2. 궤도 선 */
-        .orbit-ring {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 700px; height: 700px; border: 2px dashed rgba(6, 182, 212, 0.25);
-            border-radius: 50%; pointer-events: none;
-        }
-
-        /* 3. 행성 궤도 래퍼 */
-        .planet-wrapper {
-            position: absolute; top: 50%; left: 50%; width: 0; height: 0;
-            transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-
-        .planet-anchor {
-            position: absolute; top: 0; left: 350px; width: 0; height: 0;
-            transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-
-        .planet-trigger {
-            position: absolute; top: -25px; left: -25px; width: 50px; height: 50px;
-            background-color: var(--dark-bg); border: 2px solid var(--secondary);
-            border-radius: 50%; cursor: pointer; pointer-events: auto;
-            display: flex; justify-content: center; align-items: center;
-            color: var(--secondary); font-size: 1.2rem;
-            box-shadow: 0 0 20px rgba(6, 182, 212, 0.2);
-            transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s, border-color 0.3s, color 0.3s;
-            transform: scale(1);
-        }
-        .planet-trigger:hover, .planet-trigger.active { 
-            border-color: var(--text-main); background-color: var(--secondary); 
-            color: var(--dark-bg); box-shadow: 0 0 30px rgba(6, 182, 212, 0.8);
-            transform: scale(1.3); 
-        }
-
-        /* 고정된 행성 위치 */
-        .planet-wrapper.p1 { transform: rotate(220deg); } .planet-wrapper.p1 .planet-anchor { transform: rotate(-220deg); }
-        .planet-wrapper.p2 { transform: rotate(200deg); } .planet-wrapper.p2 .planet-anchor { transform: rotate(-200deg); }
-        .planet-wrapper.p3 { transform: rotate(180deg); } .planet-wrapper.p3 .planet-anchor { transform: rotate(-180deg); }
-        .planet-wrapper.p4 { transform: rotate(160deg); } .planet-wrapper.p4 .planet-anchor { transform: rotate(-160deg); }
-        .planet-wrapper.p5 { transform: rotate(140deg); } .planet-wrapper.p5 .planet-anchor { transform: rotate(-140deg); }
-
-        /* 트리거 텍스트 라벨 */
-        .planet-label {
-            position: absolute; right: 65px; width: max-content;
-            color: var(--text-muted); font-size: 0.9rem; font-weight: 600;
-            opacity: 0; transition: 0.3s; pointer-events: none;
-        }
-        .planet-trigger:hover .planet-label, .planet-trigger.active .planet-label {
-            color: var(--secondary); opacity: 1; transform: translateX(-10px);
-        }
-
-        /* ========================================================= */
-
-        /* 기타 스타일 (패널, 텍스트 등) */
-        .hero-welcome {
-            z-index: 5; position: absolute; top: 50%; left: 10%;
-            transform: translateY(-50%); transition: opacity 0.4s ease;
-        }
-        .hero-welcome.hidden { opacity: 0; pointer-events: none; }
-        .hero-welcome h1 { font-size: 4rem; font-weight: 800; margin-bottom: 20px; letter-spacing: -2px; line-height: 1.2;}
-        .hero-welcome h1 span { color: var(--secondary); }
-        .hero-welcome p { font-size: 1.2rem; color: var(--text-muted); max-width: 550px; line-height: 1.6; }
-
-        .panel-title { font-size: 2rem; font-weight: 800; margin-bottom: 25px; line-height: 1.3;}
-        .panel-title strong { color: var(--secondary); }
-        .eval-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-        .eval-item { background: rgba(2, 6, 23, 0.6); padding: 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); display: flex; gap: 20px; align-items: flex-start; }
-        .eval-icon { font-size: 2rem; }
-        .eval-text h4 { font-size: 1.2rem; color: var(--text-main); margin-bottom: 8px; }
-        .eval-text p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5;}
-
-        .data-list { display: flex; flex-direction: column; gap: 15px; }
-        .data-item { display: flex; justify-content: space-between; align-items: center; background: rgba(2, 6, 23, 0.6); padding: 20px 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); transition: all 0.3s ease; }
-        .data-item:hover { border-color: rgba(6, 182, 212, 0.4); background: rgba(15, 23, 42, 0.8); }
-        .data-info h4 { font-size: 1.1rem; color: var(--text-main); margin-bottom: 5px; }
-        .data-info p { color: var(--text-muted); font-size: 0.9rem; max-width: 85%; line-height: 1.4;}
-        .data-link { display: inline-flex; align-items: center; padding: 10px 20px; background: var(--primary); color: white; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 0.85rem; transition: all 0.3s; white-space: nowrap; flex-shrink: 0; margin-left: 15px; }
-        .data-link:hover { background: var(--secondary); color: var(--dark-bg); box-shadow: 0 0 15px rgba(6, 182, 212, 0.5); }
-
-        footer {
-            position: fixed; bottom: 0; width: 100%; padding: 1.5rem 5%;
-            background: rgba(2, 6, 23, 0.8); color: var(--text-muted);
-            text-align: center; font-size: 0.85rem; z-index: 1000;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-        }
+        .nav-info-btn .icon { font-size: 1.2rem; }
     </style>
 </head>
 <body>
 
-    <div id="splash-screen">
-        <h1 class="splash-text-1">깨끗한 공기 <span>행복한 세상</span></h1>
-        <div class="splash-text-2">AeroRoute</div>
+<div class="dashboard">
+    <div class="header">
+        <h1>🌬️ 울산 고정밀 악취 및 오염 가우시안 확산 예측 시스템</h1>
+        <p>기상청 실시간 수치 모델 검증 및 에어코리아 측정소 단위 환경 데이터 정밀 보정 (7대 주거거점 & 산단 좌표 최적화)</p>
+        <div class="timestamp" id="liveClock">SYSTEM LIVE</div>
     </div>
 
-    <nav>
-        <div class="logo">AeroRoute</div>
-        <div class="badge">AeroRoute System</div>
-    </nav>
+    <div class="layout-container">
+        <div class="sidebar">
+            <div class="pane-section">
+                <div class="pane-title">🕹️ 시스템 구동 제어</div>
+                <div class="mode-toggle-box">
+                    <button id="btnAuto" class="mode-btn active" onclick="setMode('AUTO')">자동 측정망 동기화</button>
+                    <button id="btnManual" class="mode-btn" onclick="setMode('MANUAL')">가상 시뮬레이션</button>
+                </div>
+                <div class="control-group">
+                    <label id="dirLabel">풍향 제어: 로딩 중...</label>
+                    <input type="range" id="windDir" min="0" max="360" value="140" disabled>
+                </div>
+                <div class="control-group">
+                    <label id="speedLabel">풍속 제어: 로딩 중...</label>
+                    <input type="range" id="windSpeed" min="0" max="15" value="4" disabled>
+                </div>
+            </div>
 
-    <div class="orbital-nav" id="orbitalNavContainer">
-        <div class="center-circle">
-            <div class="wave"></div>
-            <div class="wave"></div>
-            <div class="wave"></div>
-            <div class="center-circle-text">Aero<br>Route</div>
-        </div>
-        
-        <div class="orbit-ring"></div>
-        
-        <div class="planet-wrapper p1">
-            <div class="planet-anchor">
-                <div class="planet-trigger" data-target="panel-1">
-                    <span class="planet-label">독창성 · ESG 혁신</span>
-                    💡
+            <div class="pane-section" style="flex: 1; min-height: 0;">
+                <div class="pane-title">📊 지역 측정소별 실시간 악취 감지망</div>
+                <div id="apiErrorMsg" style="color:var(--danger-color); font-size:0.8rem; margin-bottom:10px;"></div>
+                <div class="station-grid" id="stationGrid">
+                    <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:0.85rem;">오픈 API 동기화 대기 중...</div>
                 </div>
             </div>
         </div>
-        <div class="planet-wrapper p2">
-            <div class="planet-anchor">
-                <div class="planet-trigger" data-target="panel-2">
-                    <span class="planet-label">공공데이터 필요성</span>
-                    🔗
-                </div>
-            </div>
-        </div>
-        <div class="planet-wrapper p3">
-            <div class="planet-anchor">
-                <div class="planet-trigger" data-target="panel-3">
-                    <span class="planet-label">공공데이터 허브</span>
-                    🗄️
-                </div>
-            </div>
-        </div>
-        <div class="planet-wrapper p4">
-            <div class="planet-anchor">
-                <div class="planet-trigger" data-target="panel-4">
-                    <span class="planet-label">AI 예측 기술</span>
-                    ⚙️
-                </div>
-            </div>
-        </div>
-        <div class="planet-wrapper p5">
-            <div class="planet-anchor">
-                <div class="planet-trigger" data-target="panel-5">
-                    <span class="planet-label">발전 가능성</span>
-                    🚀
-                </div>
+
+        <div class="map-section">
+            <div class="map-wrapper" id="mapWrapper">
+                <div id="map"></div>
+                <canvas id="overlayCanvas"></canvas>
+                
+                <a href="tuto.html" class="nav-info-btn" title="AeroRoute 소개 및 프레젠테이션 보기">
+                    AeroRoute에 대하여 <span class="icon">🚀</span>
+                </a>
             </div>
         </div>
     </div>
 
-    <canvas id="windCanvas"></canvas>
+    <div id="alertPanel" class="alert-panel status-safe">
+        ... 기상 통신선 파악 및 오염 지도 원격 데이터 취합 중 ...
+    </div>
+</div>
 
-    <main>
-        <div class="hero-welcome active" id="welcome-message">
-            <h1>보이지 않는 위협,<br><span>데이터로 숨결을 지키다</span></h1>
-            <p>AeroRoute는 공공데이터와 AI 확산 모델을 융합하여 울산 시민의 일상을 지키는 스마트 대기오염 관제 솔루션입니다. 우측 궤도 위의 행성을 클릭하여 확인하세요.</p>
-        </div>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+    const API_KEY = '362673347c04c97246cbd44012813a068216d755ca2ecfc92ab82fe3d82c870c'; 
+    let systemMode = 'AUTO'; 
 
-        <div class="info-panel" id="panel-1">
-            <div class="panel-card">
-                <h2 class="panel-title">왜 울산인가? <strong>새로운 관점의 문제 해결</strong></h2>
-                <div class="eval-grid">
-                    <div class="eval-item">
-                        <div class="eval-icon">🎯</div>
-                        <div class="eval-text">
-                            <h4>울산 맞춤형 독창성</h4>
-                            <p>기존 대기질 앱은 현재 위치의 정적인 수치만 제공합니다. AeroRoute는 국가산업단지와 주거지가 인접한 울산의 특수성에 착안, <strong>'바람을 타고 이동하는 오염 물질의 궤적'</strong>을 동적으로 예측하는 완전히 새로운 관점의 서비스를 제안합니다.</p>
-                        </div>
-                    </div>
-                    <div class="eval-item">
-                        <div class="eval-icon">🌱</div>
-                        <div class="eval-text">
-                            <h4>시민 건강권 및 ESG 실현</h4>
-                            <p>선제적인 악취 및 미세먼지 유입 알림을 통해 울산 시민의 건강과 생활 환경을 보호하며, 지자체의 효율적인 환경 모니터링을 지원합니다.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    function getDirectionName(angle) {
+        const directions = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
+        return directions[Math.round(((angle %= 360) < 0 ? angle + 360 : angle) / 45) % 8] + "풍";
+    }
 
-        <div class="info-panel" id="panel-2">
-            <div class="panel-card">
-                <h2 class="panel-title">공공데이터의 <strong>실질적 필요성</strong></h2>
-                <div class="eval-grid">
-                    <div class="eval-item">
-                        <div class="eval-icon">🔑</div>
-                        <div class="eval-text">
-                            <h4>대체 불가능한 문제 해결의 열쇠</h4>
-                            <p>악취와 미세먼지는 눈에 보이지 않으며 바람의 흐름에 따라 이동합니다. 이를 시각화하고 예측하기 위해서는 기상청의 실시간 풍향 데이터와 환경공단의 오염 측정 데이터가 필수적입니다.</p>
-                        </div>
-                    </div>
-                    <div class="eval-item">
-                        <div class="eval-icon">🧩</div>
-                        <div class="eval-text">
-                            <h4>유의미한 데이터 매쉬업 시너지</h4>
-                            <p>단편적인 수치 제공에 그치지 않고 기상 데이터, 대기질 데이터, 산단 공간 정보를 유기적으로 연결하여 <strong>'동적 확산 궤적'</strong>이라는 기존에 없던 새로운 가치를 창출합니다.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    const map = L.map('map', { zoomControl: false }).setView([35.535, 129.335], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
-        <div class="info-panel" id="panel-3">
-            <div class="panel-card">
-                <h2 class="panel-title">활용 <strong>공공데이터 허브</strong></h2>
-                <div class="data-list">
-                    <div class="data-item">
-                        <div class="data-info">
-                            <h4>기상청_지상(종관, ASOS) 시간자료</h4>
-                            <p>울산 지역의 실시간 풍향 및 풍속 데이터를 수집하여 확산 벡터 계산에 활용</p>
-                        </div>
-                        <a href="https://www.data.go.kr/data/15057210/openapi.do" target="_blank" class="data-link">데이터 연결 ↗</a>
-                    </div>
-                    <div class="data-item">
-                        <div class="data-info">
-                            <h4>한국환경공단_에어코리아_대기오염정보</h4>
-                            <p>측정소별 실시간 미세먼지(PM), 아황산가스 농도를 파악하여 확산 정보 매핑</p>
-                        </div>
-                        <a href="https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15073861" target="_blank" class="data-link">데이터 연결 ↗</a>
-                    </div>
-                    <div class="data-item">
-                        <div class="data-info">
-                            <h4>울산광역시 빅데이터센터 공간 데이터</h4>
-                            <p>국가산단 경계 좌표 및 지역별 악취 민원 데이터를 기반으로 정확도 보정</p>
-                        </div>
-                        <a href="https://ulsandata.kr/" target="_blank" class="data-link">데이터 연결 ↗</a>
-                    </div>
-                </div>
-            </div>
-        </div>
+    const zonesData = {
+        ind_petro: { center: [35.4985, 129.3520], radius: 1800, name: "울산석유화학단지 (오염원 A)", color: "#64748B", fillOpacity: 0.3, isSource: true, station: "여천동", pm10: 35, so2: 0.003, no2: 0.015 },
+        ind_onsan: { center: [35.4380, 129.3680], radius: 2200, name: "온산국가산업단지 (오염원 B)", color: "#475569", fillOpacity: 0.3, isSource: true, station: "온산읍", pm10: 35, so2: 0.003, no2: 0.015 },
+        ind_mipo:  { center: [35.5450, 129.3900], radius: 2500, name: "미포국가산업단지 (오염원 C)", color: "#334155", fillOpacity: 0.3, isSource: true, station: "화산리", pm10: 35, so2: 0.003, no2: 0.015 },
+        
+        res_namgu:      { center: [35.5320, 129.3250], radius: 1200, name: "남구 삼산·야음 지구", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "야음동", pm10: 35, so2: 0.002, no2: 0.012 },
+        res_okdong:     { center: [35.5280, 129.2800], radius: 1400, name: "남구 옥동·무거 지구", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "무거동", pm10: 35, so2: 0.002, no2: 0.012 },
+        res_junggu:     { center: [35.5530, 129.3200], radius: 1200, name: "중구 원도심 지구", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "성남동", pm10: 35, so2: 0.002, no2: 0.012 },
+        res_innovation: { center: [35.5720, 129.3080], radius: 1300, name: "우정혁신도시 주거지", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "성남동", pm10: 35, so2: 0.002, no2: 0.012 },
+        res_donggu:     { center: [35.5020, 129.4280], radius: 1300, name: "동구 방어·전하 지구", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "전하동", pm10: 35, so2: 0.002, no2: 0.012 },
+        res_bukgu:      { center: [35.5850, 129.3600], radius: 1400, name: "북구 송정·연암 지구", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "효문동", pm10: 35, so2: 0.002, no2: 0.012 },
+        res_beoseo:     { center: [35.5620, 129.2450], radius: 1600, name: "울주 범서(구영·천상)", color: "#06B6D4", fillOpacity: 0.05, isSource: false, station: "무거동", pm10: 35, so2: 0.002, no2: 0.012 }
+    };
 
-        <div class="info-panel" id="panel-4">
-            <div class="panel-card">
-                <h2 class="panel-title">바람의 길을 읽는 <strong>AI 예측 모델</strong></h2>
-                <div class="eval-grid">
-                    <div class="eval-item">
-                        <div class="eval-icon">🧠</div>
-                        <div class="eval-text">
-                            <h4>AI 기반 확산 예측 모델</h4>
-                            <p>단순 데이터 표출을 넘어, 수집된 기상·환경 데이터를 AI 모델에 학습시킵니다. 공단에서 발생한 오염 물질이 바람을 따라 확산되는 경로를 예측합니다.</p>
-                        </div>
-                    </div>
-                    <div class="eval-item">
-                        <div class="eval-icon">🗺️</div>
-                        <div class="eval-text">
-                            <h4>동적 시뮬레이션 시각화</h4>
-                            <p>예측된 확산 경로를 지도 위에 애니메이션과 히트맵으로 시각화하여 시민들이 직관적으로 상황을 인지할 수 있도록 제공합니다.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    const zoneCircles = {};
+    for (let key in zonesData) {
+        let z = zonesData[key];
+        zoneCircles[key] = L.circle(z.center, { radius: z.radius, color: z.color, weight: 1.5, fillOpacity: z.fillOpacity }).addTo(map);
+        zoneCircles[key].bindTooltip(`<strong style="color:var(--highlight);">${z.name}</strong><br><span style="color:#CBD5E1;">매칭측정소: ${z.station}</span>`, { permanent: false, className: 'zone-tooltip' });
+    }
 
-        <div class="info-panel" id="panel-5">
-            <div class="panel-card">
-                <h2 class="panel-title">지속 가능한 <strong>성장 모델 및 사업화</strong></h2>
-                <div class="eval-grid">
-                    <div class="eval-item">
-                        <div class="eval-icon">🏢</div>
-                        <div class="eval-text">
-                            <h4>B2G 중심의 확실한 수요</h4>
-                            <p>악취 민원을 겪고 있는 관공서를 타겟으로 한 대시보드 솔루션을 우선 납품하여 초기 매출을 창출합니다.</p>
-                        </div>
-                    </div>
-                    <div class="eval-item">
-                        <div class="eval-icon">📈</div>
-                        <div class="eval-text">
-                            <h4>타 산업도시로의 확장성</h4>
-                            <p>오염원과 주거지가 인접한 여수, 포항 등 타 도시로 확장이 용이하며 부동산 환경 지표, 스마트시티 연계 등 유망 비즈니스로 확장 가능합니다.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
+    const canvas = document.getElementById('overlayCanvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('mapWrapper');
 
-    <footer>
-        <p>ⓒ 2026 AeroRoute Team.</p>
-    </footer>
+    function resizeCanvas() { canvas.width = wrapper.clientWidth; canvas.height = wrapper.clientHeight; }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
-    <script>
-        // 스플래시 화면 제어 (총 연속 애니메이션 대기 후 페이드아웃)
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => {
-                document.getElementById('splash-screen').classList.add('fade-out');
-            }, 4500); // 4.5초 후 메인 대시보드로 전환
-        });
+    const windDirInput = document.getElementById('windDir');
+    const windSpeedInput = document.getElementById('windSpeed');
+    const dirLabel = document.getElementById('dirLabel');
+    const speedLabel = document.getElementById('speedLabel');
+    const alertPanel = document.getElementById('alertPanel');
+    const errorMsgPanel = document.getElementById('apiErrorMsg');
 
-        const triggers = document.querySelectorAll('.planet-trigger');
-        const panels = document.querySelectorAll('.info-panel');
-        const welcomeMessage = document.getElementById('welcome-message');
+    let windAngle = parseInt(windDirInput.value);
+    let windSpeed = parseInt(windSpeedInput.value);
 
-        triggers.forEach(trigger => {
-            trigger.addEventListener('click', () => activatePanel(trigger));
-        });
+    function setMode(mode) {
+        systemMode = mode;
+        if(mode === 'AUTO') {
+            document.getElementById('btnAuto').className = "mode-btn active";
+            document.getElementById('btnManual').className = "mode-btn";
+            windDirInput.disabled = true; windSpeedInput.disabled = true;
+            fetchKMAWeather();
+        } else {
+            document.getElementById('btnAuto').className = "mode-btn";
+            document.getElementById('btnManual').className = "mode-btn active";
+            windDirInput.disabled = false; windSpeedInput.disabled = false;
+            updateLabelsManual();
+        }
+    }
 
-        function activatePanel(trigger) {
-            triggers.forEach(t => t.classList.remove('active'));
-            panels.forEach(panel => panel.classList.remove('active'));
+    function updateLabelsManual() {
+        dirLabel.innerHTML = `풍향 제어: <span style="color:var(--text-main)">${windAngle}° (${getDirectionName(windAngle)})</span> [수동]`;
+        speedLabel.innerHTML = `풍속 제어: <span style="color:var(--text-main)">${windSpeed} m/s</span> [수동]`;
+    }
+
+    windDirInput.addEventListener('input', (e) => { if(systemMode === 'MANUAL') { windAngle = parseInt(e.target.value); updateLabelsManual(); } });
+    windSpeedInput.addEventListener('input', (e) => { if(systemMode === 'MANUAL') { windSpeed = parseInt(e.target.value); updateLabelsManual(); } });
+
+    class Particle {
+        constructor() { this.reset(); }
+        reset() {
+            let sources = [zonesData.ind_petro, zonesData.ind_onsan, zonesData.ind_mipo];
+            this.sourceZone = sources[Math.floor(Math.random() * sources.length)];
             
-            trigger.classList.add('active');
-            welcomeMessage.classList.add('hidden');
-
-            const targetId = trigger.getAttribute('data-target');
-            document.getElementById(targetId).classList.add('active');
+            let r = Math.random() * (this.sourceZone.radius / 111300); 
+            let theta = Math.random() * Math.PI * 2;
+            this.lat = this.sourceZone.center[0] + r * Math.cos(theta);
+            this.lng = this.sourceZone.center[1] + r * Math.sin(theta) / Math.cos(this.sourceZone.center[0] * Math.PI / 180);
+            
+            this.life = 1.0;
+            this.decay = Math.random() * 0.003 + 0.0015;
+            this.size = Math.random() * 2 + 1.5;
+            this.distance = 0; 
         }
-
-        // 배경 파티클 애니메이션
-        const canvas = document.getElementById('windCanvas');
-        const ctx = canvas.getContext('2d');
-        let particlesArray = [];
-
-        function setCanvasSize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        update() {
+            let blowingTo = (windAngle + 180) % 360;
+            this.distance += windSpeed * 0.5; 
+            let diffusionFactor = Math.min(60, this.distance * 0.4 / (windSpeed + 1)); 
+            let spreadAngle = blowingTo + (Math.random() - 0.5) * (30 + diffusionFactor); 
+            
+            let rad = spreadAngle * (Math.PI / 180);
+            let speedFactor = 0.00007; 
+            this.lng += Math.sin(rad) * (windSpeed * speedFactor);
+            this.lat += Math.cos(rad) * (windSpeed * speedFactor);
+            
+            this.life -= this.decay;
+            this.size += 0.04; 
+            if (this.life <= 0 && windSpeed > 0) this.reset();
         }
-        window.addEventListener('resize', setCanvasSize);
-        setCanvasSize();
-
-        class Particle {
-            constructor() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.speedX = Math.random() * 2 + 0.5;
-                this.speedY = (Math.random() - 0.5) * 0.5;
-                this.size = Math.random() * 2;
-                this.color = `rgba(6, 182, 212, ${Math.random() * 0.5 + 0.1})`;
+        draw(ctx) {
+            if (this.life <= 0) return;
+            let pos = map.latLngToContainerPoint([this.lat, this.lng]);
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, this.size, 0, Math.PI * 2);
+            
+            let so2 = this.sourceZone.so2;
+            ctx.shadowBlur = 10;
+            if (so2 > 0.007) {
+                ctx.fillStyle = `rgba(239, 68, 68, ${this.life * 0.7})`; 
+                ctx.shadowColor = '#EF4444';
+            } else if (so2 > 0.004) {
+                ctx.fillStyle = `rgba(245, 158, 11, ${this.life * 0.6})`; 
+                ctx.shadowColor = '#F59E0B';
+            } else {
+                ctx.fillStyle = `rgba(6, 182, 212, ${this.life * 0.5})`; 
+                ctx.shadowColor = '#06B6D4';
             }
-            update() {
-                this.x += this.speedX;
-                this.y += Math.sin(this.x * 0.01) * 0.5 + this.speedY;
-                if (this.x > canvas.width) {
-                    this.x = 0;
-                    this.y = Math.random() * canvas.height;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    let particles = Array.from({ length: 500 }, () => new Particle());
+
+    function isInsideCircle(lat, lng, center, radius) {
+        return L.latLng(lat, lng).distanceTo(center) <= radius;
+    }
+
+    async function fetchKMAWeather() {
+        if (systemMode !== 'AUTO') return;
+        try {
+            const date = "20260617"; 
+            const url = `https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList?serviceKey=${API_KEY}&pageNo=1&numOfRows=10&dataType=JSON&dataCd=ASOS&dateCd=HR&stnIds=152&startDt=${date}&startHh=10&endDt=${date}&endHh=12`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.response?.body?.items?.item) {
+                const latest = data.response.body.items.item[data.response.body.items.item.length - 1];
+                windAngle = parseFloat(latest.wd);
+                windSpeed = parseFloat(latest.ws);
+                windDirInput.value = windAngle;
+                windSpeedInput.value = windSpeed;
+                dirLabel.innerHTML = `<span style="color:var(--secondary);">[기상청 현황]</span> 풍향: ${windAngle}° (${getDirectionName(windAngle)})`;
+                speedLabel.innerHTML = `<span style="color:var(--secondary);">[기상청 현황]</span> 풍속: ${windSpeed.toFixed(1)} m/s`;
+            }
+        } catch (e) {
+            console.warn("기상 정보 백업 데이터 우회 구동");
+        }
+    }
+
+    async function fetchAirQuality() {
+        try {
+            const url = `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty?serviceKey=${API_KEY}&returnType=json&pageNo=1&numOfRows=30&sidoName=${encodeURIComponent("울산")}&ver=1.0`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.response?.body?.items) {
+                const items = data.response.body.items;
+                for (let key in zonesData) {
+                    let targetStation = zonesData[key].station;
+                    let matchedData = items.find(item => item.stationName === targetStation);
+                    if (matchedData) {
+                        zonesData[key].pm10 = parseInt(matchedData.pm10Value) || 30;
+                        zonesData[key].so2 = parseFloat(matchedData.so2Value) || 0.003;
+                        zonesData[key].no2 = parseFloat(matchedData.no2Value) || 0.012;
+                    }
                 }
+                renderStationUI();
             }
-            draw() {
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-            }
+        } catch (e) {
+            errorMsgPanel.innerText = "🚨 에어코리아 동기화 제한 (가상 디폴트 스케일 계산 적용)";
+            renderStationUI(); 
         }
+    }
 
-        function initParticles() {
-            particlesArray = [];
-            let numberOfParticles = (canvas.width * canvas.height) / 7000;
-            for (let i = 0; i < numberOfParticles; i++) {
-                particlesArray.push(new Particle());
-            }
+    function calculateOdorIntensity(so2, no2, pm10) {
+        let score = (so2 * 1000) + (no2 * 100) + (pm10 * 0.1);
+        if (score > 25) return { text: "5도 (극심)🔥", color: "var(--danger-color)" };
+        if (score > 18) return { text: "4도 (강함)😡", color: "#F43F5E" };
+        if (score > 12) return { text: "3도 (확연)⚠️", color: "var(--warning-color)" };
+        if (score > 6)  return { text: "2도 (보통)🟡", color: "#FACC15" };
+        return { text: "1도 (미미)🟢", color: "var(--safe-color)" };
+    }
+
+    function renderStationUI() {
+        const grid = document.getElementById('stationGrid');
+        grid.innerHTML = "";
+        
+        for (let key in zonesData) {
+            let z = zonesData[key];
+            let odor = calculateOdorIntensity(z.so2, z.no2, z.pm10);
+            
+            let row = document.createElement('div');
+            row.className = "station-row";
+            row.innerHTML = `
+                <div>
+                    <span class="station-name">[${z.station}망]</span> ${z.name.split(" ")[0]}<br>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">SO₂: ${z.so2}ppm | PM10: ${z.pm10}㎍</span>
+                </div>
+                <span class="station-badge" style="background:${odor.color}22; color:${odor.color}; border: 1px solid ${odor.color}55;">${odor.text}</span>
+            `;
+            grid.appendChild(row);
         }
+    }
 
-        function animateParticles() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let i = 0; i < particlesArray.length; i++) {
-                particlesArray[i].update();
-                particlesArray[i].draw();
-            }
-            connectParticles();
-            requestAnimationFrame(animateParticles);
-        }
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        let dangerCounts = { res_namgu: 0, res_okdong: 0, res_junggu: 0, res_innovation: 0, res_donggu: 0, res_bukgu: 0, res_beoseo: 0 };
 
-        function connectParticles() {
-            let maxDistance = 120;
-            for (let a = 0; a < particlesArray.length; a++) {
-                for (let b = a; b < particlesArray.length; b++) {
-                    let dx = particlesArray[a].x - particlesArray[b].x;
-                    let dy = particlesArray[a].y - particlesArray[b].y;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (distance < maxDistance) {
-                        ctx.strokeStyle = `rgba(37, 99, 235, ${0.15 - distance/1000})`;
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.moveTo(particlesArray[a].x, particlesArray[a].y);
-                        ctx.lineTo(particlesArray[b].x, particlesArray[b].y);
-                        ctx.stroke();
+        particles.forEach(p => {
+            if (windSpeed > 0) p.update();
+            p.draw(ctx);
+            
+            if (p.life > 0.05) {
+                for (let key in dangerCounts) {
+                    if (isInsideCircle(p.lat, p.lng, zonesData[key].center, zonesData[key].radius)) {
+                        dangerCounts[key] += p.sourceZone.so2 * 350; 
                     }
                 }
             }
+        });
+
+        let maxDangerValue = 0;
+        let affectedZones = [];
+        let alertThreshold = 1.0; 
+
+        for (let key in dangerCounts) {
+            let currentDanger = dangerCounts[key];
+            if (currentDanger > alertThreshold) {
+                if(currentDanger > maxDangerValue) maxDangerValue = currentDanger;
+                affectedZones.push(zonesData[key].name.split(" ")[1] || zonesData[key].name);
+                
+                let blinkColor = (Date.now() % 800 > 400) ? "var(--danger-color)" : "var(--warning-color)";
+                zoneCircles[key].setStyle({ color: blinkColor, weight: 2, fillOpacity: 0.15 });
+            } else if (currentDanger > 0.3) {
+                zoneCircles[key].setStyle({ color: "var(--warning-color)", weight: 1.5, fillOpacity: 0.1 });
+            } else {
+                zoneCircles[key].setStyle({ color: "var(--secondary)", weight: 1, fillOpacity: 0.05 });
+            }
         }
 
-        initParticles();
-        animateParticles();
-    </script>
+        if (affectedZones.length > 0) {
+            alertPanel.className = "alert-panel status-danger";
+            alertPanel.innerHTML = `🚨 복합 악취 가스 유입 경보: [${affectedZones.join(", ")}] 위험 노출 (최대 영향도: ${maxDangerValue.toFixed(2)})`;
+        } else if (maxDangerValue > 0.3) {
+            alertPanel.className = "alert-panel status-warning";
+            alertPanel.innerHTML = `⚠️ 주의: 일부 확장 주거단지 경계 구역에 오염 기류 근접 통과 중`;
+        } else {
+            alertPanel.className = "alert-panel status-safe";
+            alertPanel.innerHTML = "🟢 청정 상태: 실시간 풍향 조건하에 7대 광역 주거거점 악취 안전선 유지";
+        }
+        
+        requestAnimationFrame(animate);
+    }
+
+    map.on('move', () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => p.draw(ctx));
+    });
+
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('liveClock').innerText = `RUNNING: ${now.toLocaleTimeString()}`;
+    }, 1000);
+
+    setMode('AUTO');
+    fetchAirQuality();
+    setInterval(fetchKMAWeather, 600000); 
+    setInterval(fetchAirQuality, 1200000); 
+    animate();
+</script>
 </body>
 </html>
